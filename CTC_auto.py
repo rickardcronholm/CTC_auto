@@ -11,7 +11,11 @@
 # Rickard Cronholm, 2015
 # rickard.cronholm@skane.se
 #
-# v0.3.5
+# v0.3.7
+# Added: 
+# Expand CT grid if smaller than Dose Grid
+# Sorting rules on voxel belongings (local rules)
+# Apply default ramp if no relElecDens specified for structure type NONE
 #
 # Usage
 # python CTC_auto RPRDfile RSfile CTfile fileName
@@ -211,6 +215,24 @@ if supportStructures:
     if ct_mtrx.shape != (len(cts_zmesh), len(cts_ymesh), len(cts_xmesh)):
         ct_mtrx = CTCtools.map_coordinates(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, cts_xmesh, cts_ymesh, cts_zmesh, 0)
 
+# extend CT if rds_*mesh is beyond cts_*mesh
+ct0_xmesh = cts_xmesh[:]
+ct0_ymesh = cts_ymesh[:]
+ct0_zmesh = cts_zmesh[:]
+if np.min(rds_xmesh) < np.min(cts_xmesh) or np.max(rds_xmesh) > np.max(cts_xmesh):
+    limits = [np.min([np.min(rds_xmesh), np.min(cts_xmesh)]), np.max([np.max(rds_xmesh), np.max(cts_xmesh)])]
+    cts_xmesh = CTCtools.extendMesh(cts_xmesh, limits)
+if np.min(rds_ymesh) < np.min(cts_ymesh) or np.max(rds_ymesh) > np.max(cts_ymesh):
+    limits = [np.min([np.min(rds_ymesh), np.min(cts_ymesh)]), np.max([np.max(rds_ymesh), np.max(cts_ymesh)])]
+    cts_ymesh = CTCtools.extendMesh(cts_ymesh, limits)
+if np.min(rds_zmesh) < np.min(cts_zmesh) or np.max(rds_zmesh) > np.max(cts_zmesh):
+    limits = [np.min([np.min(rds_zmesh), np.min(cts_zmesh)]), np.max([np.max(rds_zmesh), np.max(cts_zmesh)])]
+    cts_zmesh = CTCtools.extendMesh(cts_zmesh, limits)
+# pad ct using map_coordinates if cts != ct
+if ct_mtrx.shape != (len(cts_zmesh), len(cts_ymesh), len(cts_xmesh)):
+    ct_mtrx = CTCtools.map_coordinates(ct_mtrx, ct0_xmesh, ct0_ymesh, ct0_zmesh, cts_xmesh, cts_ymesh, cts_zmesh, 0)
+
+
 # Deinterpolate CT data onto dose grid
 # check if rds_zmesh is beyond cts_zmesh, if so eliminate slices
 rds_zmesh = np.intersect1d(np.around(rds_zmesh, decimals = 5), np.around(cts_zmesh, decimals = 5), assume_unique = True)
@@ -247,12 +269,14 @@ structureShell = struct()
 
 # get name, types and properties
 names = []
+types = []
 for elem in refObsSeq:
     structure = copy.deepcopy(structureShell)
     # structure.init_name()
     structure.name = RS.RTROIObservationsSequence[elem].ROIObservationLabel
     names.append(RS.RTROIObservationsSequence[elem].ROIObservationLabel)
     structure.type = RS.RTROIObservationsSequence[elem].RTROIInterpretedType
+    types.append(RS.RTROIObservationsSequence[elem].RTROIInterpretedType)
     try:
         if RS.RTROIObservationsSequence[elem].ROIPhysicalPropertiesSequence[0].ROIPhysicalProperty == 'REL_ELEC_DENSITY':
             structure.RelElecDens = float(RS.RTROIObservationsSequence[elem].ROIPhysicalPropertiesSequence[0].ROIPhysicalPropertyValue)
@@ -265,6 +289,7 @@ for elem in refObsSeq:
 # create and append structure for outside
 structure = copy.deepcopy(structureShell)
 names.append('OUTSIDE')
+types.append('OUTSIDE')
 structure.name = 'OUTSIDE'
 structure.type = 'OUTSIDE'
 structures.append(structure)
@@ -304,14 +329,41 @@ if supportStructures:
     inner = [i for i, x in enumerate(names) if x.startswith(cv.suppInner)][0]
     outer = [i for i, x in enumerate(names) if x.startswith(cv.suppOuter)][0]
     structures[outer].logicMatrix = np.where(structures[inner].logicMatrix == 1, 0, structures[outer].logicMatrix)
+
+# remove external from outside
+extNr = [i for i, x in enumerate(types) if x == cv.extName][0]
+outNr = [i for i, x in enumerate(types) if x == 'OUTSIDE'][0]
+structures[outNr].logicMatrix = np.where(structures[extNr].logicMatrix == 1, 0, structures[outNr].logicMatrix)
+
+# reverse order of structures in order to handle EXTERNAL prior to OUTSIDE
+structures = structures[::-1]
+
 for i in range(1, len(structures) + 1):
     for j in range(i+1, len(structures ) + 1):
         if CTCtools.isEngulfed(structures[-j].logicMatrix, structures[-i].logicMatrix):
-            #print '{0:s} is engulfed by {1:s}'.format(structures[-j].name, structures[-i].name)
-            structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == 1, 0, structures[-i].logicMatrix)
-            #print 'removing mutual points from {0:s}'.format(structures[-i].name)
+            #print '{0:s}.{2:s} is engulfed by {1:s}.{3:s}'.format(structures[-j].name, structures[-i].name, structures[-j].type, structures[-i].type)
+            if structures[-j].type == 'CAVITY' and structures[-i].type == 'OUTSIDE':
+                structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == 1, 0, structures[-j].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-j].name)
+            elif structures[-i].type == 'CAVITY' and structures[-j].type == 'OUTSIDE':
+                structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == 1, 0, structures[-i].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-i].name)
+            else:
+                structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == 1, 0, structures[-i].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-i].name)
+        elif CTCtools.isEngulfed(structures[-i].logicMatrix, structures[-j].logicMatrix):
+            #print '{0:s}.{2:s} is engulfed by {1:s}.{3:s}'.format(structures[-i].name, structures[-j].name, structures[-i].type, structures[-j].type)
+            if structures[-i].type == 'CAVITY' and structures[-j].type == 'OUTSIDE':
+                structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == 1, 0, structures[-i].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-i].name)
+            elif structures[-j].type == 'CAVITY' and structures[-i].type == 'OUTSIDE':
+                structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == 1, 0, structures[-j].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-j].name)
+            else:
+                structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == 1, 0, structures[-j].logicMatrix)
+                #print 'removing mutual points from {0:s}'.format(structures[-j].name)
         else:
-            #print '{0:s} is not engulfed by {1:s}'.format(structures[-j].name, structures[-i].name)
+            #print '{0:s}.{2:s} is not engulfed by {1:s}.{3:s} and vice versa'.format(structures[-j].name, structures[-i].name, structures[-j].type, structures[-i].type)
             indx = []
             indx = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix)
             numPts = []
@@ -319,7 +371,13 @@ for i in range(1, len(structures) + 1):
             numPts = np.asarray(numPts)
             #print 'Found {0:5d} mutual points'.format(len(np.reshape(numPts,-1)))
             if len(np.reshape(numPts,-1)) > 0:
-                if structures[-j].type == 'OUTSIDE':
+                if structures[-j].type == 'CAVITY':
+                    structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix, 0, structures[-j].logicMatrix)
+                    #print 'removing mutual points from {0:s}'.format(structures[-j].name)
+                elif structures[-i].type == 'CAVITY':
+                    structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == structures[-i].logicMatrix, 0, structures[-i].logicMatrix)
+                    #print 'removing mutual points from {0:s}'.format(structures[-i].name)
+                elif structures[-j].type == 'OUTSIDE':
                     structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix, 0, structures[-j].logicMatrix)
                     #print 'removing mutual points from {0:s}'.format(structures[-j].name)
                 elif structures[-i].type == 'OUTSIDE':
@@ -372,6 +430,11 @@ for i in range(0, len(structures)):
         # find correct rampName
         indx = [j for j, x in enumerate(addStructType) if x == structures[i].type][0]
         rampName = addRampName[indx]
+        if structures[i].type == 'NONE':
+            try:
+                k = structures[i].RelElecDens
+            except AttributeError:
+                rampName = cv.externalRamp
     #structures[i].ramp = CTCtools.getStructFromMatFile(rampName, 'materialRamp', 0)
     structures[i].ramp = CTCtools.grabData(rampName, 'materialRamp', 0, 2)
 
