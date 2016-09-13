@@ -1,7 +1,18 @@
 # Toolbox for CTC_auto
 #
-# Rickard Cronholm, 2015
-# rickard.cronholm@skane.se
+#    Copyright [2016] [Rickard Cronholm] Licensed under the
+#    Educational Community License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may
+#    obtain a copy of the License at
+#
+#http://www.osedu.org/licenses/ECL-2.0
+#
+#    Unless required by applicable law or agreed to in writing,
+#    software distributed under the License is distributed on an "AS IS"
+#    BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+#    or implied. See the License for the specific language governing
+#    permissions and limitations under the License.
+#
 
 import glob
 import scipy.io
@@ -79,7 +90,8 @@ def writeContFile(dicomDir, fileName, content):
 
 def getStructFromMatFile(fileName, attr, level):
     data = struct()
-    matfile = scipy.io.loadmat(fileName, squeeze_me=True, struct_as_record=False)
+    matfile = scipy.io.loadmat(fileName, squeeze_me=True,
+    struct_as_record=False)
     if level == 0:
         for field in matfile[attr]._fieldnames:
             val = getattr(matfile[attr], field)
@@ -129,8 +141,8 @@ def getDICOMcoords(fileName, cm):
 
     # if cm is 1 convert to cm from DICOM native mm
     if cm:
-        xCoord[:] = [x/10 for x in xCoord]
-        yCoord[:] = [x/10 for x in yCoord]
+        xCoord[:] = [x / 10 for x in xCoord]
+        yCoord[:] = [x / 10 for x in yCoord]
 
     return xCoord, yCoord
 
@@ -146,11 +158,11 @@ def getDICOMzCoord(fileName, cm):
         zCoord = dcm.ImagePositionPatient[2]
     else:
         zCoord = np.asarray(dcm.GridFrameOffsetVector)
-        zCoord[:] = [x+dcm.ImagePositionPatient[2] for x in zCoord]
+        zCoord[:] = [x + dcm.ImagePositionPatient[2] for x in zCoord]
 
     # if cm is 1 convert to cm from DICOM native mm
     if cm:
-        zCoord[:] = [x/10 for x in zCoord]
+        zCoord[:] = [x / 10 for x in zCoord]
 
     return zCoord
 
@@ -162,9 +174,9 @@ def getCTinfo(fileList, cm):
 
     # loop through fileList to get individual z coord
     for i in range(0, len(fileList)):
-        zCoord[i] = getDICOMzCoord(fileList[i], False) #  get z coord in mm
+        zCoord[i] = getDICOMzCoord(fileList[i], False)  # get z coord in mm
     if cm:
-        zCoord[:] = [x/10 for x in zCoord]  # convert to cm
+        zCoord[:] = [x / 10 for x in zCoord]  # convert to cm
 
     # sort by ascending
     ct_order = np.argsort(zCoord)
@@ -190,7 +202,8 @@ def getCTinfo(fileList, cm):
 def getCTdata(fileName):
     dcm = dicom.read_file(fileName)  # read DICOM file
     ct_slice = np.ndarray.astype(dcm.pixel_array, 'int')
-    ct_slice[:] = [x*int(dcm.RescaleSlope)+int(dcm.RescaleIntercept) for x in ct_slice]
+    ct_slice[:] = [x * int(dcm.RescaleSlope) + int(dcm.RescaleIntercept)
+    for x in ct_slice]
     return ct_slice
 
 
@@ -200,16 +213,17 @@ def getOrient(fileName):
 
 
 def create1dDICOMcoord(start, pix, dim, direction):
-    stop = start + direction * pix * (dim-1)
+    stop = start + direction * pix * (dim - 1)
     return np.linspace(start, stop, dim)
 
 
 def deInterpCTmatrix(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, rd_xmesh, rd_ymesh, rd_zmesh, method):
     pbar = ProgressBar()
     mtrx = np.empty((len(rd_zmesh), len(rd_ymesh), len(rd_xmesh)))
-    grid_x, grid_y = np.mgrid[rd_xmesh[0]:rd_xmesh[-1]:len(rd_xmesh)*1j, rd_ymesh[0]:rd_ymesh[-1]:len(rd_ymesh)*1j]
+    grid_x, grid_y = np.mgrid[rd_xmesh[0]:rd_xmesh[-1]:len(rd_xmesh) * 1j,
+    rd_ymesh[0]:rd_ymesh[-1]:len(rd_ymesh) * 1j]
 
-    points = np.empty((len(ct_xmesh)*len(ct_ymesh), 2))
+    points = np.empty((len(ct_xmesh) * len(ct_ymesh), 2))
     cnt = 0
     for elem in ct_xmesh:
         for item in ct_ymesh:
@@ -218,12 +232,15 @@ def deInterpCTmatrix(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, rd_xmesh, rd_ymesh, 
             cnt += 1
 
     for i in pbar(range (0, len(rd_zmesh))):
-        sliceNr = np.argwhere(np.around(ct_zmesh, decimals = 5) == np.around(rd_zmesh[i], decimals = 5))[0][0]
+        sliceNr = np.argwhere(np.around(ct_zmesh, decimals=5) ==
+        np.around(rd_zmesh[i], decimals=5))[0][0]
         ct_slice = np.reshape(ct_mtrx[sliceNr][:][:].T, -1)
 
-        mtrx[i][:][:] = interpolate.griddata(points, ct_slice, (grid_x, grid_y), method).T
+        mtrx[i][:][:] = interpolate.griddata(points, ct_slice,
+        (grid_x, grid_y), method).T
 
     return mtrx
+
 
 def getContour(RSData, zmesh, flip, cm):
 # create and initialize structures
@@ -232,14 +249,14 @@ def getContour(RSData, zmesh, flip, cm):
     for i in range(0, len(RSData.ContourSequence)):
         rawCont = map(float, RSData.ContourSequence[i].ContourData)
         if cm:
-            rawCont[:] = [x/10 for x in rawCont]  # convert to cm
-        xCont = np.zeros(len(rawCont)/3)
-        yCont = np.zeros(len(rawCont)/3)
-        zCont = np.zeros(len(rawCont)/3)
-        for j in range(1, len(xCont)+1):
-            xCont[j-1] = rawCont[3*j-3]
-            yCont[j-1] = rawCont[3*j-2]
-            zCont[j-1] = rawCont[3*j-1]
+            rawCont[:] = [x / 10 for x in rawCont]  # convert to cm
+        xCont = np.zeros(len(rawCont) / 3)
+        yCont = np.zeros(len(rawCont) / 3)
+        zCont = np.zeros(len(rawCont) / 3)
+        for j in range(1, len(xCont) + 1):
+            xCont[j - 1] = rawCont[3 * j - 3]
+            yCont[j - 1] = rawCont[3 * j - 2]
+            zCont[j - 1] = rawCont[3 * j - 1]
         # add the first element to form closed loop
         xCont = np.append(xCont, xCont[0])
         yCont = np.append(yCont, yCont[0])
@@ -251,7 +268,8 @@ def getContour(RSData, zmesh, flip, cm):
             cont = np.vstack((yCont, xCont, zCont))
 
         # locate which slice nr it belongs to
-        sliceNr = np.argwhere(np.around(zmesh, decimals = 5) == np.around(cont[2][0], decimals = 5))[0][0]
+        sliceNr = np.argwhere(np.around(zmesh, decimals=5) ==
+        np.around(cont[2][0], decimals=5))[0][0]
 
         # the first data set will implicitly belong to a new slice
         if i == 0 or sliceNr != lastSlice:
@@ -271,7 +289,7 @@ def getExtremeOfContour(data, extremes):
     y = np.empty(0)
     z = np.empty(0)
     for i in range(0, len(data)):
-        if data[i] != None:
+        if data[i] is not None:
             for j in range(0, len(data[i])):
                 x = np.hstack((x, data[i][j][0]))
                 y = np.hstack((y, data[i][j][1]))
@@ -286,11 +304,11 @@ def getExtremeOfContour(data, extremes):
 
 
 def compExtremes(ext, arr):
-    if ext[0] == None:
+    if ext[0] is None:
         ext[0] = min(arr)
     else:
         ext[0] = min(ext[0], min(arr))
-    if ext[1] == None:
+    if ext[1] is None:
         ext[1] = max(arr)
     else:
         ext[1] = max(ext[1], max(arr))
@@ -310,7 +328,7 @@ def getCorrContSeq(seq, lookfor):
 def extendMesh(mesh, ext):
     meshMin = min(mesh)
     meshMax = max(mesh)
-    step = np.unique(np.around(np.diff(mesh), decimals = 5))[0]
+    step = np.unique(np.around(np.diff(mesh), decimals=5))[0]
     low = 0
     high = 0
     if ext[0] < meshMin:
@@ -341,15 +359,16 @@ def interpStructToDose(contour, rd_x, rd_y, rd_z, ct_x, ct_y, ct_z):
     yL = np.arange(len(ct_y))
 
     # iterate through contour to generate a mask for each slice
-    # note that there may be empty slices as well as slices with multiple segments
+    # note; there may be empty slices as well as slices with multiple segments
     pbar = ProgressBar()
     for j in pbar(range(0, len(contour))):
-        if contour[j] != None:  # skip empty slices
-            sliceNr = np.argwhere(np.around(ct_z, decimals = 5) == np.around(contour[j][0][2][0], decimals = 5))[0][0]
+        if contour[j] is not None:  # skip empty slices
+            sliceNr = np.argwhere(np.around(ct_z, decimals=5) ==
+            np.around(contour[j][0][2][0], decimals=5))[0][0]
             for i in range(0, len(contour[j])):
                 # take care of unbound contours
-                points_x = copy.deepcopy(contour[j][i][0][:])  # get points corresponding to x
-                points_y = copy.deepcopy(contour[j][i][1][:])  # get points corresponding to y
+                points_x = copy.deepcopy(contour[j][i][0][:])  # get x-points
+                points_y = copy.deepcopy(contour[j][i][1][:])  # get y-points
                 points_x[np.where(points_x < min(ct_x))] = min(ct_x)
                 points_x[np.where(points_x > max(ct_x))] = max(ct_x)
                 points_y[np.where(points_y < min(ct_y))] = min(ct_y)
@@ -358,11 +377,13 @@ def interpStructToDose(contour, rd_x, rd_y, rd_z, ct_x, ct_y, ct_z):
                 points_x = np.interp(points_x, ct_x, xL)
                 points_y = np.interp(points_y, ct_y, yL)
                 # assign mask based on polygons
-                [rr, cc] = draw.polygon(np.asarray(points_y), np.asarray(points_x), (len(ct_y), len(ct_x)))
+                [rr, cc] = draw.polygon(np.asarray(points_y),
+                np.asarray(points_x), (len(ct_y), len(ct_x)))
                 tempMask = np.zeros((len(ct_y), len(ct_x)))
                 tempMask[rr, cc] = 1
                 # add for the current slice
-                maskM[sliceNr][:][:] = np.add(maskM[sliceNr][:][:], tempMask[:][:])
+                maskM[sliceNr][:][:] = np.add(maskM[sliceNr][:][:],
+                tempMask[:][:])
 
     del tempMask
     maskM = np.where(maskM > 1, 1, maskM)  # remove duplicates
@@ -377,16 +398,16 @@ def cropCT(mtrx, ct_x, ct_y, ct_z, rd_x, rd_y, rd_z):
     margin = 5
     # x
     ind = getIndx(ct_x, rd_x, margin)
-    ct_x = ct_x[ind[0]:ind[1]+1]
-    mtrx = mtrx[:, :, ind[0]:ind[1]+1]
+    ct_x = ct_x[ind[0]:ind[1] + 1]
+    mtrx = mtrx[:, :, ind[0]:ind[1] + 1]
     # y
     ind = getIndx(ct_y, rd_y, margin)
-    ct_y = ct_y[ind[0]:ind[1]+1]
-    mtrx = mtrx[:, ind[0]:ind[1]+1, :]
+    ct_y = ct_y[ind[0]:ind[1] + 1]
+    mtrx = mtrx[:, ind[0]:ind[1] + 1, :]
     # z
     ind = getIndx(ct_z, rd_z, margin)
-    ct_z = ct_z[ind[0]:ind[1]+1]
-    mtrx = mtrx[ind[0]:ind[1]+1, :, :]
+    ct_z = ct_z[ind[0]:ind[1] + 1]
+    mtrx = mtrx[ind[0]:ind[1] + 1, :, :]
 
     return mtrx, ct_x, ct_y, ct_z
 
@@ -402,7 +423,7 @@ def getIndx(a, b, margin):
 
     ind = np.asarray(ind)
     ind = ind.clip(min=0)
-    ind = ind.clip(max=len(a)-1)
+    ind = ind.clip(max=len(a) - 1)
 
     return ind
 
@@ -411,14 +432,15 @@ def map_coordinates(mtrx, ct_x, ct_y, ct_z, rd_x, rd_y, rd_z, order):
     mtrxOut = np.zeros((len(rd_z), len(rd_y), len(rd_x)))  # preallocate
 
     # create sparse grids
-    xct, yct = ogrid[min(ct_x):max(ct_x):len(ct_x) * 1j, min(ct_y):max(ct_y):len(ct_y) * 1j]
+    xct, yct = ogrid[min(ct_x):max(ct_x):len(ct_x) * 1j,
+    min(ct_y):max(ct_y):len(ct_y) * 1j]
 
     # interpolate coord arrays in cm to voxel nr
-    xL = np.linspace(0, len(ct_x)-1, len(ct_x))
-    yL = np.linspace(0, len(ct_y)-1, len(ct_y))
-    extrapolatorX = InterpolatedUnivariateSpline( ct_x, xL, k=1 )
+    xL = np.linspace(0, len(ct_x) - 1, len(ct_x))
+    yL = np.linspace(0, len(ct_y) - 1, len(ct_y))
+    extrapolatorX = InterpolatedUnivariateSpline(ct_x, xL, k=1)
     x = extrapolatorX(rd_x)
-    extrapolatorY = InterpolatedUnivariateSpline( ct_y, yL, k=1 )
+    extrapolatorY = InterpolatedUnivariateSpline(ct_y, yL, k=1)
     y = extrapolatorY(rd_y)
     # create mesh grids
     xrd, yrd = mgrid[min(x):max(x):len(x) * 1j, min(y):max(y):len(y) * 1j]
@@ -429,8 +451,10 @@ def map_coordinates(mtrx, ct_x, ct_y, ct_z, rd_x, rd_y, rd_z, order):
     cnt = 0
     for i in pbar(range (0, len(rd_z))):
         try:
-        	sliceNr = np.argwhere(np.around(ct_z, decimals = 5) == np.around(rd_z[i], decimals = 5))[0][0]
-        	ct_slice = ndimage.map_coordinates(mtrx[sliceNr][:][:], coords, order=order).T
+            sliceNr = np.argwhere(np.around(ct_z,
+            decimals=5) == np.around(rd_z[i], decimals=5))[0][0]
+            ct_slice = ndimage.map_coordinates(mtrx[sliceNr][:][:],
+            coords, order=order).T
         except IndexError:
             ct_slice = np.zeros((len(rd_y), len(rd_x)))
         mtrxOut[cnt][:][:] = ct_slice[:][:]
@@ -445,9 +469,11 @@ def computeDensity(mtrx, ramp):
     densMtrx = np.zeros(mtrx.shape)
     # compute density for all but last 'segment'
     for i in range(0, len(ramp) - 1):
-        densMtrx = np.where(mtrx <= ramp[i][0], mtrx*ramp[i][1][1] + ramp[i][1][0], densMtrx)
+        densMtrx = np.where(mtrx <= ramp[i][0],
+        mtrx * ramp[i][1][1] + ramp[i][1][0], densMtrx)
     # compute density for last 'segment'
-    densMtrx = np.where(mtrx > ramp[-2][0], mtrx*ramp[-1][1][1] + ramp[-1][1][0], densMtrx)
+    densMtrx = np.where(mtrx > ramp[-2][0], mtrx * ramp[-1][1][1] +
+    ramp[-1][1][0], densMtrx)
     # remove negatives
     densMtrx = np.where(densMtrx < 0., 0., densMtrx)
     return densMtrx
@@ -475,7 +501,7 @@ def computeMedia(mtrx, structures, medium, medNr):
         tempMtrx = np.where(mtrx <= bounds[0], globalNr, tempMtrx)
         for i in range(1, len(elem.ramp)):
             globalNr = medNr[medium.index(names[i])]
-            tempMtrx = np.where(mtrx > bounds[i-1], globalNr, tempMtrx)
+            tempMtrx = np.where(mtrx > bounds[i - 1], globalNr, tempMtrx)
 
         medMtrx = np.where(elem.logicMatrix == 1, tempMtrx, medMtrx)
     return medMtrx.astype('int')
@@ -507,10 +533,9 @@ def buildGlobalMediaList(structures):
     medNames = flatten(medNames)
     medNames = list(set(medNames))
 
-
     # sort medium based on average upper ct bound
     summation = [0] * len(medNames)
-    average  = [0] * len(medNames)
+    average = [0] * len(medNames)
     for i in range(0, len(medNames)):
         cnt = 0
         for j in range(0, len(structures)):
@@ -521,7 +546,7 @@ def buildGlobalMediaList(structures):
                     cnt += 1
                 except ValueError:
                     pass
-        average[i] = float(summation[i])/cnt
+        average[i] = float(summation[i]) / cnt
 
     sortIndx = np.ndarray.tolist(np.argsort(np.asarray(average)))
     medium = [medNames[x] for x in sortIndx]
@@ -541,7 +566,7 @@ def writeEgsphant(fileName, x, y, z, medium, estepe, media, density, spaceDelimi
 
     if halfThick:
         # "interpolate" to half slice thickness
-        zn = np.linspace(z[0], z[-1], 2*len(z)-1)
+        zn = np.linspace(z[0], z[-1], 2 * len(z) - 1)
         z = copy.deepcopy(zn)
         zb = createBoundGrid(z)
 
@@ -569,9 +594,11 @@ def writeEgsphant(fileName, x, y, z, medium, estepe, media, density, spaceDelimi
             for j in range(0, len(y)):
                 for k in range(0, len(x)):
                     if not halfThick:
-                        f.write('{0:d} '.format(media[i][j][k]))  # for normal thickness
+                        # for normal thick
+                        f.write('{0:d} '.format(media[i][j][k]))
                     else:
-                        f.write('{0:d} '.format(media[int(i/2)][j][k]))  # for half thick
+                        # for half thick
+                        f.write('{0:d} '.format(media[int(i / 2)][j][k]))
                 f.write('\n')
             f.write('\n')
     else:
@@ -579,9 +606,11 @@ def writeEgsphant(fileName, x, y, z, medium, estepe, media, density, spaceDelimi
             for j in range(0, len(y)):
                 for k in range(0, len(x)):
                     if not halfThick:
-                        f.write('{0:d}'.format(media[i][j][k]))  # for normal thickness
+                        # for normal thickness
+                        f.write('{0:d}'.format(media[i][j][k]))
                     else:
-                        f.write('{0:d}'.format(media[int(i/2)][j][k]))  # for half thick
+                        # for half thick
+                        f.write('{0:d}'.format(media[int(i / 2)][j][k]))
                 f.write('\n')
             f.write('\n')
     # write density matrix
@@ -590,7 +619,7 @@ def writeEgsphant(fileName, x, y, z, medium, estepe, media, density, spaceDelimi
             if not halfThick:
                 writeBound(f, density[i][j][:], 5)  # for normal thickness
             else:
-                writeBound(f, density[int(i/2)][j][:], 5)  # for half thick
+                writeBound(f, density[int(i / 2)][j][:], 5)  # for half thick
         f.write('\n')
 
     f.close()
@@ -604,8 +633,8 @@ def writeBound(f, grid, num):
 
 
 def createBoundGrid(grid):
-    step = np.unique(np.around(np.diff(grid), decimals = 5))[0]
-    return np.linspace(grid[0]-step/2, grid[-1]+step/2, len(grid)+1)
+    step = np.unique(np.around(np.diff(grid), decimals=5))[0]
+    return np.linspace(grid[0] - step / 2, grid[-1] + step / 2, len(grid) + 1)
 
 
 def getFromFile(fileName, switch):
@@ -642,6 +671,16 @@ def getFromFile(fileName, switch):
                 innerList.append(int(elem.split()[1]))
                 myList.append(innerList)
             except ValueError:
+                pass
+    elif switch == 3:
+        for elem in data:
+            try:
+                elems = filter(None, elem.split('\t'))
+                myList.append([elems[2].strip(), float(elems[0].strip()),
+                float(elems[1].strip())])
+            except ValueError:
+                pass
+            except IndexError:
                 pass
 
     return myList
@@ -682,12 +721,12 @@ def getPythonicList(data, attr):
     return myList
 
 
-def flatten(seq,container=None):
+def flatten(seq, container=None):
     if container is None:
         container = []
     for s in seq:
-        if hasattr(s,'__iter__'):
-            flatten(s,container)
+        if hasattr(s, '__iter__'):
+            flatten(s, container)
         else:
             container.append(s)
     return container
@@ -697,7 +736,7 @@ def getHUfromDens(dens, densRamp):
     # iteratively compare against boundaries in densRamp
     cnt = 0
     while cnt < len(densRamp):
-        myHU = (dens - densRamp[cnt][1][0])/densRamp[cnt][1][1]
+        myHU = (dens - densRamp[cnt][1][0]) / densRamp[cnt][1][1]
         if myHU <= densRamp[cnt][0]:
             break
         cnt += 1

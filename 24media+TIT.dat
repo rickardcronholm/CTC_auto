@@ -1,0 +1,27 @@
+Data for media segmentation
+MediaName	upperCTbound
+AIR521ICRU	50
+LUNG521ICRU	587
+hu3a		694
+hu3b		801
+hu3c		908
+hu3d		1015
+hu4		1129
+hu5		1200
+hu6		1300
+hu7		1400
+hu8		1500
+hu9		1600
+hu10		1700
+hu11		1800
+hu12		1900
+hu13		2000
+hu14		2100
+hu15		2200
+hu16		2300
+hu17		2400
+hu18		2500
+hu19		2600
+hu20		2700
+hu21		2800
+TITANIUM	5000

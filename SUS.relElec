@@ -1,0 +1,6 @@
+RelElecDens to MassDens lookup table
+RelElecDens	MassDens
+0.7500		0.7500	H20700ICRU
+0.5		0.4799	H20700ICRU
+0.05		0.0275	Rohacell51A
+0.7		0.7109	170C700ICRU
