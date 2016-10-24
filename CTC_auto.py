@@ -38,7 +38,7 @@ import os
 from scipy import ndimage
 
 # full path to configuration file
-confFile = 'ctc_auto.conf'
+confFile = '/home/mcqa/MCQA/samc.conf'
 
 class struct:
 
@@ -111,10 +111,8 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
         rd_xmesh = rd_xmesh[::-1]
     if sum(orientRD[3:]) == -sum(orientCT[3:]):
         rd_ymesh = rd_ymesh[::-1]
-    try:
-        int(np.argwhere(ct_zmesh == rd_zmesh[-1]))
-    except TypeError:
-        step = np.unique(np.around(np.diff(ct_zmesh), decimals=5))
+    if len(np.unique([np.all(np.diff(ct_zmesh) > 0), np.all(np.diff(rd_zmesh) > 0)])) > 1:
+        step = np.unique(np.around(np.diff(ct_zmesh), decimals=3))
         if len(step) == 1:
             step = float(step)
         else:
@@ -122,6 +120,19 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
         rd_zmesh = CTCtools.create1dDICOMcoord(rd_zmesh[0], step,
         len(rd_zmesh), -1)
         rd_zmesh = rd_zmesh[::-1]
+    '''
+    try:
+        int(np.argwhere(ct_zmesh == rd_zmesh[-1]))
+    except TypeError:
+        step = np.unique(np.around(np.diff(ct_zmesh), decimals=3))
+        if len(step) == 1:
+            step = float(step)
+        else:
+            step = float(np.average(step))
+        rd_zmesh = CTCtools.create1dDICOMcoord(rd_zmesh[0], step,
+        len(rd_zmesh), -1)
+        rd_zmesh = rd_zmesh[::-1]
+    '''
 
     # inverse arrays and flip matrix depending on meshes
     if ct_xmesh[-1] < ct_xmesh[0]:
@@ -215,7 +226,7 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
 
     # Deinterpolate CT data onto dose grid
     # check if rds_zmesh is beyond cts_zmesh, if so eliminate slices
-    rds_zmesh = np.intersect1d(np.around(rds_zmesh, decimals=5), np.around(cts_zmesh, decimals=5), assume_unique=True)
+    rds_zmesh = np.intersect1d(np.around(rds_zmesh, decimals=3), np.around(cts_zmesh, decimals=3), assume_unique=True)
     # density matrix is computed using cubic interpolation
     dens_mtrx = CTCtools.map_coordinates(ct_mtrx, cts_xmesh, cts_ymesh,
     cts_zmesh, rds_xmesh, rds_ymesh, rds_zmesh, 3)
