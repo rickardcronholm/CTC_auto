@@ -232,8 +232,8 @@ def deInterpCTmatrix(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, rd_xmesh, rd_ymesh, 
             cnt += 1
 
     for i in pbar(range (0, len(rd_zmesh))):
-        sliceNr = np.argwhere(np.around(ct_zmesh, decimals=5) ==
-        np.around(rd_zmesh[i], decimals=5))[0][0]
+        sliceNr = np.argwhere(np.around(ct_zmesh, decimals=3) ==
+        np.around(rd_zmesh[i], decimals=3))[0][0]
         ct_slice = np.reshape(ct_mtrx[sliceNr][:][:].T, -1)
 
         mtrx[i][:][:] = interpolate.griddata(points, ct_slice,
@@ -268,8 +268,8 @@ def getContour(RSData, zmesh, flip, cm):
             cont = np.vstack((yCont, xCont, zCont))
 
         # locate which slice nr it belongs to
-        sliceNr = np.argwhere(np.around(zmesh, decimals=5) ==
-        np.around(cont[2][0], decimals=5))[0][0]
+        sliceNr = np.argwhere(np.around(zmesh, decimals=3) ==
+        np.around(cont[2][0], decimals=3))[0][0]
 
         # the first data set will implicitly belong to a new slice
         if i == 0 or sliceNr != lastSlice:
@@ -328,7 +328,7 @@ def getCorrContSeq(seq, lookfor):
 def extendMesh(mesh, ext):
     meshMin = min(mesh)
     meshMax = max(mesh)
-    step = np.unique(np.around(np.diff(mesh), decimals=5))[0]
+    step = np.unique(np.around(np.diff(mesh), decimals=3))[0]
     low = 0
     high = 0
     if ext[0] < meshMin:
@@ -363,8 +363,8 @@ def interpStructToDose(contour, rd_x, rd_y, rd_z, ct_x, ct_y, ct_z):
     pbar = ProgressBar()
     for j in pbar(range(0, len(contour))):
         if contour[j] is not None:  # skip empty slices
-            sliceNr = np.argwhere(np.around(ct_z, decimals=5) ==
-            np.around(contour[j][0][2][0], decimals=5))[0][0]
+            sliceNr = np.argwhere(np.around(ct_z, decimals=3) ==
+            np.around(contour[j][0][2][0], decimals=3))[0][0]
             for i in range(0, len(contour[j])):
                 # take care of unbound contours
                 points_x = copy.deepcopy(contour[j][i][0][:])  # get x-points
@@ -452,7 +452,7 @@ def map_coordinates(mtrx, ct_x, ct_y, ct_z, rd_x, rd_y, rd_z, order):
     for i in pbar(range (0, len(rd_z))):
         try:
             sliceNr = np.argwhere(np.around(ct_z,
-            decimals=5) == np.around(rd_z[i], decimals=5))[0][0]
+            decimals=3) == np.around(rd_z[i], decimals=3))[0][0]
             ct_slice = ndimage.map_coordinates(mtrx[sliceNr][:][:],
             coords, order=order).T
         except IndexError:
@@ -633,7 +633,7 @@ def writeBound(f, grid, num):
 
 
 def createBoundGrid(grid):
-    step = np.unique(np.around(np.diff(grid), decimals=5))[0]
+    step = np.unique(np.around(np.diff(grid), decimals=3))[0]
     return np.linspace(grid[0] - step / 2, grid[-1] + step / 2, len(grid) + 1)
 
 
