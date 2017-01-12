@@ -321,8 +321,8 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
     # If neither of the structures are OUTSIDE or EXTERNAL the voxels are removed from the structure with the lowest index
     if supportStructures:
         # remove suppInner from suppOuter
-        inner = [i for i, x in enumerate(names) if x.startswith(cv.suppInner)][0]
-        outer = [i for i, x in enumerate(names) if x.startswith(cv.suppOuter)][0]
+        inner = [i for i, x in enumerate(names) if cv.suppInner in x][0]
+        outer = [i for i, x in enumerate(names) if cv.suppOuter in x][0]
         structures[outer].logicMatrix = np.where(structures[inner].logicMatrix == 1, 0, structures[outer].logicMatrix)
     for i in range(1, len(structures) + 1):
         for j in range(i + 1, len(structures ) + 1):
