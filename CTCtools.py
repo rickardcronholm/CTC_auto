@@ -23,6 +23,7 @@ from progressbar import ProgressBar
 from scipy import ndimage, ogrid, mgrid, interpolate
 from skimage import draw
 from scipy.interpolate import InterpolatedUnivariateSpline
+import sys
 
 
 class struct:
@@ -232,8 +233,8 @@ def deInterpCTmatrix(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, rd_xmesh, rd_ymesh, 
             cnt += 1
 
     for i in pbar(range (0, len(rd_zmesh))):
-        sliceNr = np.argwhere(np.around(ct_zmesh, decimals=3) ==
-        np.around(rd_zmesh[i], decimals=3))[0][0]
+        sliceNr = np.argwhere(np.around(ct_zmesh, decimals=1) ==
+        np.around(rd_zmesh[i], decimals=1))[0][0]
         ct_slice = np.reshape(ct_mtrx[sliceNr][:][:].T, -1)
 
         mtrx[i][:][:] = interpolate.griddata(points, ct_slice,
@@ -268,8 +269,8 @@ def getContour(RSData, zmesh, flip, cm):
             cont = np.vstack((yCont, xCont, zCont))
 
         # locate which slice nr it belongs to
-        sliceNr = np.argwhere(np.around(zmesh, decimals=3) ==
-        np.around(cont[2][0], decimals=3))[0][0]
+        sliceNr = np.argwhere(np.around(zmesh, decimals=1) ==
+        np.around(cont[2][0], decimals=1))[0][0]
 
         # the first data set will implicitly belong to a new slice
         if i == 0 or sliceNr != lastSlice:
@@ -363,8 +364,8 @@ def interpStructToDose(contour, rd_x, rd_y, rd_z, ct_x, ct_y, ct_z):
     pbar = ProgressBar()
     for j in pbar(range(0, len(contour))):
         if contour[j] is not None:  # skip empty slices
-            sliceNr = np.argwhere(np.around(ct_z, decimals=3) ==
-            np.around(contour[j][0][2][0], decimals=3))[0][0]
+            sliceNr = np.argwhere(np.around(ct_z, decimals=1) ==
+            np.around(contour[j][0][2][0], decimals=1))[0][0]
             for i in range(0, len(contour[j])):
                 # take care of unbound contours
                 points_x = copy.deepcopy(contour[j][i][0][:])  # get x-points
@@ -380,10 +381,11 @@ def interpStructToDose(contour, rd_x, rd_y, rd_z, ct_x, ct_y, ct_z):
                 [rr, cc] = draw.polygon(np.asarray(points_y),
                 np.asarray(points_x), (len(ct_y), len(ct_x)))
                 tempMask = np.zeros((len(ct_y), len(ct_x)))
-                tempMask[rr, cc] = 1
+                tempMask[rr, cc] = -1
                 # add for the current slice
                 maskM[sliceNr][:][:] = np.add(maskM[sliceNr][:][:],
                 tempMask[:][:])
+                maskM[sliceNr][:][:] = np.abs(maskM[sliceNr][:][:])
 
     del tempMask
     maskM = np.where(maskM > 1, 1, maskM)  # remove duplicates
@@ -452,7 +454,7 @@ def map_coordinates(mtrx, ct_x, ct_y, ct_z, rd_x, rd_y, rd_z, order):
     for i in pbar(range (0, len(rd_z))):
         try:
             sliceNr = np.argwhere(np.around(ct_z,
-            decimals=3) == np.around(rd_z[i], decimals=3))[0][0]
+            decimals=1) == np.around(rd_z[i], decimals=1))[0][0]
             ct_slice = ndimage.map_coordinates(mtrx[sliceNr][:][:],
             coords, order=order).T
         except IndexError:
@@ -622,7 +624,9 @@ def writeEgsphant(fileName, x, y, z, medium, estepe, media, density, spaceDelimi
                 writeBound(f, density[int(i / 2)][j][:], 5)  # for half thick
         f.write('\n')
 
-    f.close()
+    # finish of with an emtpy line to satisfy dosxyznrc.mortran
+    f.write('\n')  
+    f.close()  # close file
 
 
 def writeBound(f, grid, num):
@@ -633,7 +637,7 @@ def writeBound(f, grid, num):
 
 
 def createBoundGrid(grid):
-    step = np.unique(np.around(np.diff(grid), decimals=3))[0]
+    step = np.unique(np.around(np.diff(grid), decimals=1))[0]
     return np.linspace(grid[0] - step / 2, grid[-1] + step / 2, len(grid) + 1)
 
 
@@ -676,7 +680,7 @@ def getFromFile(fileName, switch):
         for elem in data:
             try:
                 elems = filter(None, elem.split('\t'))
-                myList.append([elems[2].strip(), float(elems[0].strip()),
+                myList.append([elems[2].strip(), elems[0].strip(),
                 float(elems[1].strip())])
             except ValueError:
                 pass
@@ -744,6 +748,14 @@ def getHUfromDens(dens, densRamp):
     return myHU
 
 
+def checkEngulf(child, parent):
+    if isEngulfed(parent.logicMatrix, child.logicMatrix):
+        return parent, child
+    else:
+        #print '{0:s} is engulfed by {1:s}, switching order'.format(child.name, parent.name)
+        return child, parent
+
+
 def isEngulfed(A, B):
     A = np.reshape(A, -1)
     B = np.reshape(B, -1)
@@ -753,6 +765,103 @@ def isEngulfed(A, B):
     if len(check) > 1 or len(check) == 0:
         check = False
     else:
-        check = check[0]
+        check = True
 
     return check
+
+
+def covered(A, B):
+    A = np.reshape(A, -1)
+    B = np.reshape(B, -1)
+    C = A + B
+    return float(len(np.where(C == 2)[0])) / float(len(np.where(A == 1)[0]))
+
+
+def sortStructures(sIn, order):
+    sOut = []
+    for item in order:
+        if isinstance(item, basestring):
+            match = [i for i, x in enumerate(sIn) if x.type == item]
+        else:
+            match = [i for i, x in enumerate(sIn) if hasattr(x, 'RelElecDens')]
+        # append
+        for elem in match:
+            sOut.append(sIn[elem])
+        # remove from sIn
+        match.reverse()
+        [sIn.pop(x) for x in match]
+
+    # append the rest
+    for elem in sIn:
+        sOut.append(elem)
+
+    return sOut
+
+
+def belongToOne(structures, extName):
+    for i in range(0, len(structures) - 1):
+        #print structures[i].name, '\n----------------'
+        for j in range(i + 1, len(structures)):
+            #printnamevol(structures[i])
+            #printnamevol(structures[j])
+            parent = copy.deepcopy(structures[i])
+            child = copy.deepcopy(structures[j])
+            if parent.type == extName or child.type == extName or parent.name == 'OUTSIDE':
+                 parent, child = checkEngulf(child, parent)
+            indx = []
+            indx = np.where(parent.logicMatrix == child.logicMatrix)
+            numPts = []
+            numPts = np.where(parent.logicMatrix[indx] == 1)
+            numPts = np.asarray(numPts)
+            if len(np.ravel(numPts)) > 0:
+                child.logicMatrix = np.where(parent.logicMatrix == child.logicMatrix, 0 , child.logicMatrix)
+                #print 'removing {2:5d} mutual points in {1:s} and {0:s} from {0:s}'.format(child.name, parent.name, len(np.ravel(numPts)))
+                if parent.name == structures[i].name:
+                    structures[i] = copy.deepcopy(parent)
+                    structures[j] = copy.deepcopy(child)
+                else:
+                    structures[j] = copy.deepcopy(parent)
+                    structures[i] = copy.deepcopy(child)
+            #printnamevol(structures[i])
+            #printnamevol(structures[j])
+    return structures
+
+
+def dropEmpty(sIn):
+    sOut = []
+    for elem in sIn:
+        if np.sum(elem.logicMatrix) > 0:
+            sOut.append(elem)
+    return sOut
+
+
+def printnamevol(s):
+    print 'Structure: {0:s} has est volume {1:5d}'.format(s.name, int(np.sum(s.logicMatrix)))
+
+
+
+def checkSaveTypes(toCheck, myList):
+    try:
+        myList.index(toCheck)
+        return True
+    except ValueError:
+        return False
+
+
+def dropOutOfExt(sIn, extName, saveTypes):
+    sOut = []
+    ext = [i for i, x in enumerate(sIn) if x.type == extName][0]
+    external = sIn[ext]
+    for elem in sIn:
+        if not elem.name == external.name and not checkSaveTypes(elem.type, saveTypes):
+            # check if it is engulfed
+            #print '{0:s} covered to {2:.2f}% by {1:s}'.format(elem.name, external.name, covered(elem.logicMatrix, external.logicMatrix)*100.) 
+            if covered(elem.logicMatrix, external.logicMatrix) > .95:
+                sOut.append(elem)
+                #print '{0:s} appended'.format(elem.name)
+            else:
+                print '{0:s} dropped'.format(elem.name)
+        else:
+            sOut.append(elem)
+            #print '{0:s} appended'.format(elem.name)
+    return sOut

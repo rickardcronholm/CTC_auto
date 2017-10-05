@@ -40,8 +40,8 @@ from scipy import ndimage
 # full path to configuration file
 confFile = '/home/mcqa/MCQA/samc.conf'
 
-class struct:
 
+class struct:
     def __init__(self):
         pass
 
@@ -268,6 +268,8 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
 
     # get name, types and properties
     names = []
+    cnt = 0
+    skips = []
     for elem in refObsSeq:
         structure = copy.deepcopy(structureShell)
         # structure.init_name()
@@ -281,12 +283,22 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
         structure.type = RS.RTROIObservationsSequence[elem].RTROIInterpretedType
         try:
             if RS.RTROIObservationsSequence[elem].ROIPhysicalPropertiesSequence[0].ROIPhysicalProperty == 'REL_ELEC_DENSITY':
-                structure.RelElecDens = float(RS.RTROIObservationsSequence[elem].ROIPhysicalPropertiesSequence[0].ROIPhysicalPropertyValue)
+                structure.RelElecDens = format(float(RS.RTROIObservationsSequence[elem].ROIPhysicalPropertiesSequence[0].ROIPhysicalPropertyValue), '.4f')
         except AttributeError:
             pass
         #if not structure.type == cv.suppName:
         #structure.RelElecDens = 1.0000  # set to 1 for all structures
-        structures.append(structure)
+        # don't append if name starts with Z_Ring
+        skipNames = ['z_Tring']
+        if not any(structure.name.lower().startswith(item) for item in skipNames):
+            structures.append(structure)
+        else:
+            skips.append(cnt)
+        cnt += 1
+
+    # remove the skippers
+    [refObsSeq.pop(x) for x in list(reversed(skips))]
+    [refContSeq.pop(x) for x in list(reversed(skips))]
 
     # create and append structure for outside
     structure = copy.deepcopy(structureShell)
@@ -303,61 +315,46 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
         structures[cnt].contour = CTCtools.getContour(RS.ROIContourSequence[elem], ct_zmesh, abs(orientCT[1]), True)
         # deInterpolate contour onto dose grid and generate boolean matrix
         structures[cnt].logicMatrix = CTCtools.interpStructToDose(structures[cnt].contour, rds_xmesh, rds_ymesh, rds_zmesh, cts_xmesh, cts_ymesh, cts_zmesh)
-        # expand external contour by convolution
-        if structures[cnt].type == cv.extName and not hasattr(structures[cnt],'RelElecDens'):  # add && not releELec !!!
-            indx = np.where(ndimage.convolve(structures[cnt].logicMatrix,filt,mode='nearest') >= 1)
-            structures[cnt].logicMatrix = np.zeros(structures[cnt].logicMatrix.shape).astype(int)
-            structures[cnt].logicMatrix[indx] = 1
         cnt += 1
 
     # outside
-    structures[cnt].logicMatrix = np.ones(structures[0].logicMatrix.shape)
+    out = [i for i, x in enumerate(names) if 'OUTSIDE' in x][0]
+    structures[out].logicMatrix = np.ones(structures[0].logicMatrix.shape)
+    
+    # drop empty structures (due to being too small)
+    structures = CTCtools.dropEmpty(structures)  
+
+    # drop structures that are not engulfed by external save dedicated types
+    saveTypes = ['OUTSIDE', cv.suppName, 'BOLUS']
+    structures = CTCtools.dropOutOfExt(structures, cv.extName, saveTypes)
+
+    # expand external contour by convolution
+    for cnt in range(0, len(structures)):
+        if structures[cnt].type == cv.extName and not hasattr(structures[cnt],'RelElecDens'):  # added && not releELec !!!
+            indx = np.where(ndimage.convolve(structures[cnt].logicMatrix,filt,mode='nearest') >= 1)
+            structures[cnt].logicMatrix = np.zeros(structures[cnt].logicMatrix.shape).astype(int)
+            structures[cnt].logicMatrix[indx] = 1
+            break
 
     # make sure that each voxel only belongs to one structure
-    # the sorting rules are as follows:
-    # If one contour is engulfed by another, the voxels will belong to the engulfed structure
-    # If mutual points are found, they are removed from structures in the following order:
-    # OUTSIDE, EXTERNAL.
-    # If neither of the structures are OUTSIDE or EXTERNAL the voxels are removed from the structure with the lowest index
     if supportStructures:
         # remove suppInner from suppOuter
         inner = [i for i, x in enumerate(names) if cv.suppInner in x][0]
         outer = [i for i, x in enumerate(names) if cv.suppOuter in x][0]
         structures[outer].logicMatrix = np.where(structures[inner].logicMatrix == 1, 0, structures[outer].logicMatrix)
-    for i in range(1, len(structures) + 1):
-        for j in range(i + 1, len(structures ) + 1):
-            if CTCtools.isEngulfed(structures[-j].logicMatrix, structures[-i].logicMatrix):
-                structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == 1, 0, structures[-i].logicMatrix)
-            else:
-                #print '{0:s} is not engulfed by {1:s}'.format(structures[-j].name, structures[-i].name)
-                indx = []
-                indx = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix)
-                numPts = []
-                numPts = np.where(structures[-i].logicMatrix[indx] == 1)
-                numPts = np.asarray(numPts)
-                #print 'Found {0:5d} mutual points'.format(len(np.reshape(numPts,-1)))
-                if len(np.reshape(numPts, -1)) > 0:
-                    if structures[-j].type == 'OUTSIDE':
-                        structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix, 0, structures[-j].logicMatrix)
-                        #print 'removing mutual points from {0:s}'.format(structures[-j].name)
-                    elif structures[-i].type == 'OUTSIDE':
-                        structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == structures[-i].logicMatrix, 0, structures[-i].logicMatrix)
-                        #print 'removing mutual points from {0:s}'.format(structures[-i].name)
-                    else:
-                        if structures[-j].type == cv.extName:
-                            structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix, 0, structures[-j].logicMatrix)
-                        elif structures[-i].type == cv.extName:
-                            structures[-i].logicMatrix = np.where(structures[-j].logicMatrix == structures[-i].logicMatrix, 0, structures[-i].logicMatrix)
-                        else:
-                            structures[-j].logicMatrix = np.where(structures[-i].logicMatrix == structures[-j].logicMatrix, 0, structures[-j].logicMatrix)
-                        #print 'removing mutual points from {0:s}'.format(structures[-j].name)
+    sortOrder = [cv.suppName, 'OUTSIDE', cv.extName, 'CTV', True]
+    structures = CTCtools.sortStructures(structures, sortOrder)  # sort
+    # belong to one
+    structures = CTCtools.belongToOne(structures, cv.extName)
+    structures = CTCtools.dropEmpty(structures)  # drop empty
 
     # perform HU corrections
     if cv.setAir.lower() == 'y':
+        out = [i for i, x in enumerate(structures) if 'OUTSIDE' in x.name][0]
         # assumption: the density of air is below the breakpoint in the bilinear HU-dense curve
         airHU = (cv.airDens - densRamp[0][1][0]) / densRamp[0][1][1]
-        ct_mtrx = np.where(structures[-1].logicMatrix == 1, airHU, ct_mtrx)
-        dens_mtrx = np.where(structures[-1].logicMatrix == 1, airHU, dens_mtrx)
+        ct_mtrx = np.where(structures[out].logicMatrix == 1, airHU, ct_mtrx)
+        dens_mtrx = np.where(structures[out].logicMatrix == 1, airHU, dens_mtrx)
 
     # compute density matrix
     density = CTCtools.computeDensity(dens_mtrx, densRamp)
@@ -378,6 +375,7 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
             indx = [j for j, x in enumerate(addStructType)
             if x == structures[i].type][0]
             rampName = addRampName[indx]
+        print structures[i].name, rampName
         structures[i].ramp = CTCtools.grabData(rampName, 'materialRamp', 0, 2)
 
     # Build and sort total media list
