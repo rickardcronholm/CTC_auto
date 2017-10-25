@@ -38,7 +38,7 @@ import os
 from scipy import ndimage
 
 # full path to configuration file
-confFile = '/home/mcqa/MCQA/samc.conf'
+confFile = 'ctc_auto.conf'
 
 
 class struct:
@@ -314,7 +314,10 @@ def main(RPRDfile, RSfile, CTfile, fileName, addStructType=[], addRampName=[]):
         # get contour
         structures[cnt].contour = CTCtools.getContour(RS.ROIContourSequence[elem], ct_zmesh, abs(orientCT[1]), True)
         # deInterpolate contour onto dose grid and generate boolean matrix
-        structures[cnt].logicMatrix = CTCtools.interpStructToDose(structures[cnt].contour, rds_xmesh, rds_ymesh, rds_zmesh, cts_xmesh, cts_ymesh, cts_zmesh)
+        if structures[cnt].contour:
+            structures[cnt].logicMatrix = CTCtools.interpStructToDose(structures[cnt].contour, rds_xmesh, rds_ymesh, rds_zmesh, cts_xmesh, cts_ymesh, cts_zmesh)
+        else:
+            structures[cnt].logicMatrix = np.zeros(ct_mtrx.shape)
         cnt += 1
 
     # outside

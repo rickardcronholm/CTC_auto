@@ -246,6 +246,10 @@ def deInterpCTmatrix(ct_mtrx, ct_xmesh, ct_ymesh, ct_zmesh, rd_xmesh, rd_ymesh, 
 def getContour(RSData, zmesh, flip, cm):
 # create and initialize structures
     contour = [None] * len(zmesh)
+    
+    # return None if no ContourSequence exists
+    if not hasattr(RSData, 'ContourSequence'):
+        return None
 
     for i in range(0, len(RSData.ContourSequence)):
         rawCont = map(float, RSData.ContourSequence[i].ContourData)
